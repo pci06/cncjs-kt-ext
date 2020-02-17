@@ -1,4 +1,5 @@
 /* eslint-disable no-useless-escape */
+const fs = require('fs')
 const SocketWrap = require('./socketwrap')
 
 const alFileNamePrefix = '#AL:'
@@ -87,9 +88,13 @@ module.exports = class Autolevel {
     let dx = (context.xmax - context.xmin) / parseInt((context.xmax - context.xmin) / this.delta)
     let dy = (context.ymax - context.ymin) / parseInt((context.ymax - context.ymin) / this.delta)
     code.push('(AL: probing initial point)')
-    code.push(`G90 G0 X${context.xmin.toFixed(3)} Y${context.ymin.toFixed(3)} Z${this.height}`)
-    code.push(`G38.2 Z-${this.height} F${this.feed / 2}`)
-    code.push(`G10 L20 P1 Z0`) // set the z zero
+    code.push(`G90`)
+    code.push(`G0 Z${this.height}`)
+    code.push(`G0 X${context.xmin.toFixed(3)} Y${context.ymin.toFixed(3)} Z${this.height}`)
+/*@PCI.old    code.push(`G38.2 Z-${this.height} F${this.feed / 2}`) */
+		/* Probing at feed given by user */
+    code.push(`G38.2 Z-${this.height+1} F${this.feed}`)
+    code.push(`G10 L20 P0 Z0`) // set the z zero of current WCS
     code.push(`G0 Z${this.height}`)
     this.planedPointCount++
 
@@ -106,7 +111,11 @@ module.exports = class Autolevel {
         if (x > context.xmax) x = context.xmax
         code.push(`(AL: probing point ${this.planedPointCount + 1})`)
         code.push(`G90 G0 X${x.toFixed(3)} Y${y.toFixed(3)} Z${this.height}`)
-        code.push(`G38.2 Z-${this.height} F${this.feed}`)
+/*@PCI.old        code.push(`G38.2 Z-${this.height} F${this.feed}`) */
+				/* In case of a "hole", we can go a bit deeper as the touch probe will
+				 * stop the motor
+				 */
+        code.push(`G38.2 Z-${this.height+1} F${this.feed}`)
         code.push(`G0 Z${this.height}`)
         this.planedPointCount++
       }
@@ -268,7 +277,7 @@ module.exports = class Autolevel {
             let segs = this.splitToSegments(p0, pt)
             for (let seg of segs) {
               let cpt = this.compensateZCoord(seg)
-              let newLine = lineStripped + ` X${cpt.x.toFixed(3)} Y${cpt.y.toFixed(3)} Z${cpt.z.toFixed(3)} ; Z${seg.z.toFixed(3)}`
+              let newLine = lineStripped + ` X${cpt.x.toFixed(3)} Y${cpt.y.toFixed(3)} Z${cpt.z.toFixed(3)} (old Z${seg.z.toFixed(3)})`
               result.push(newLine.trim())
             }
           } else {
@@ -286,9 +295,22 @@ module.exports = class Autolevel {
       this.sckw.sendGcode(`(AL: loading new gcode ${newgcodeFileName} ...)`)
       this.sckw.loadGcode(newgcodeFileName, result.join('\n'))
       this.sckw.sendGcode('(AL: finished)')
+			/* for debugging 
+			fs.writeFile("/tmp/"+this.gcodeFileName, result.join('\n'), function(err) {
+    		if(err) {
+        	return console.log(err);
+    		} else {
+    			console.log('The file was saved /tmp/ !');
+				}
+			}); 
+			*/
+
+   		this.sckw.sendGcode(`(AL: The file /tmp/${this.gcodeFileName} was saved )`);
     } catch (x) {
       this.sckw.sendGcode(`(AL: error occurred ${x})`)
     }
     console.log('Leveling applied')
   }
 }
+
+/* vim: set tabstop=2 : */
